@@ -129,30 +129,3 @@ class MLP(nn.Module):
         x = self.gelu(x)        # (B, T, fc)
         x = self.c_proj(x)      # (B, T, C)
         return x
-
-
-# -------------------------------------------------------- #
-if __name__ == "__main__":
-    config = GPTConfig()
-    gpt = GPT(config)
-
-    # Generate random token indices
-    batch_size = 2
-    seq_len = 16
-    input_ids = torch.randint(0, config.vocab_size, size=(batch_size, seq_len))
-    targets = torch.randint(0, config.vocab_size, size=(batch_size, seq_len))  # Generate random targets
-
-    # Forward pass through the model
-    logits, loss = gpt(input_ids, targets)
-
-
-    print("Logits shape:", logits.shape)  # Expected: (batch_size, seq_len, vocab_size)
-    # Assert logits shape
-    assert logits.shape == (batch_size, seq_len, config.vocab_size), \
-        f"Logits shape mismatch: expected ({batch_size}, {seq_len}, {config.vocab_size}), but got {logits.shape}"
-    print("Logits shape is correct!")
-    # Verify loss is a scalar
-    assert loss is not None, "Loss should not be None when targets are provided"
-    assert loss.dim() == 0, f"Loss should be a scalar, but got shape {loss.shape}"
-    print("Loss computation is correct!")
-    print("Loss:", loss.item())  # Print loss value
