@@ -182,7 +182,8 @@ class GPT(nn.Module):
 num_return_sequences = 5
 max_length = 30
 
-model = GPT.from_pretrained('gpt2')
+# model = GPT.from_pretrained('gpt2')
+model = GPT(GPTConfig())    # randomly initialized model
 model.eval()
 model.to('mps')
 

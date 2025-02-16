@@ -1,6 +1,6 @@
 import unittest
 import torch
-from gpt2 import GPT, GPTConfig  # Ensure these are correctly implemented
+from train_gpt2 import GPT, GPTConfig  # Ensure these are correctly implemented
 
 class TestGPTModel(unittest.TestCase):
     def setUp(self):
