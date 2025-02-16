@@ -53,6 +53,8 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(config.n_embd, fc_dim)     # fan out
         self.gelu = nn.GELU(approximate='tanh')          # Gelu non-linearlity
         self.c_proj = nn.Linear(fc_dim, config.n_embd)   # fan in
+        # scaling factor for linear layers by 1/sqrt(depth_layer) - to control residual stream stddev 
+        self.c_proj.NANOGPT_SCALE_INIT = 1
 
     def forward(self, x):
         # x: (B, T, C)
@@ -99,6 +101,22 @@ class GPT(nn.Module):
             ln_f = nn.LayerNorm(config.n_embd)  # final layer norm
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)  # classification head
+        # weight sharing scheme - token embedding and output head 
+        self.transformer.wte.weight = self.lm_head.weight
+        # init params
+        self.apply(self._init_weights)  # apply to all modules
+
+    def _init_weights(self, module):
+        # following GPT-2 init hyper-parameters
+        if isinstance(module, nn.Linear):
+            std = 0.02
+            if hasattr(module, 'NANOGPT_SCALE_INIT'):
+                std *= (2 * self.config.n_layer) ** -0.5
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, targets=None):
         # idx is token_ids : (B, T), C = n_emb
@@ -188,25 +206,51 @@ def load_tokens(filename):
     ptt = torch.tensor(npt, dtype=torch.long)
     return ptt
 
-class DataLoaderLite:
-    def __init__(self, B, T, process_rank, num_processes, split):
-        self.B = B
-        self.T = T
-        self.process_rank = process_rank
-        self.num_processes = num_processes
-        assert split in {'train', 'val'}
+class DataLoaderLite: 
+    # def __init__(self, B, T, process_rank, num_processes, split):
+    #     self.B = B
+    #     self.T = T
+    #     self.process_rank = process_rank
+    #     self.num_processes = num_processes
+    #     assert split in {'train', 'val'}
 
-        # get the shard filenames
-        data_root = "edu_fineweb10B"
-        shards = os.listdir(data_root)
-        shards = [s for s in shards if split in s]
-        shards = sorted(shards)
-        shards = [os.path.join(data_root, s) for s in shards]
-        self.shards = shards
-        assert len(shards) > 0, f"no shards found for split {split}"
-        if master_process:
-            print(f"found {len(shards)} shards for split {split}")
-        self.reset()
+    #     # get the shard filenames
+    #     data_root = "edu_fineweb10B"
+    #     shards = os.listdir(data_root)
+    #     shards = [s for s in shards if split in s]
+    #     shards = sorted(shards)
+    #     shards = [os.path.join(data_root, s) for s in shards]
+    #     self.shards = shards
+    #     assert len(shards) > 0, f"no shards found for split {split}"
+    #     if master_process:
+    #         print(f"found {len(shards)} shards for split {split}")
+    #     self.reset()
+
+
+    def __init__(self, B, T):
+        self.B = B # batch size
+        self.T = T # sequence length
+        self.num_processes = 1
+
+        
+        # load the input file
+        with open('input.txt', 'r', encoding='utf-8') as f:
+            text = f.read()
+        
+        # encode text to tokens using tiktoken GPT-2 encoder
+        enc = tiktoken.get_encoding("gpt2")
+        tokens = enc.encode(text)        
+        # load first shard
+        self.tokens = torch.tensor(tokens)
+        # calculate and print stats
+        n_tokens = len(self.tokens)
+        n_batches = n_tokens // (self.B * self.T)
+        print(f"Dataset stats:")
+        print(f"- {n_tokens:,} tokens")
+        print(f"- {n_batches:,} batches per epoch")
+        
+        self.current_position = 0
+
 
     def reset(self):
         # state, init at shard zero
@@ -214,64 +258,21 @@ class DataLoaderLite:
         self.tokens = load_tokens(self.shards[self.current_shard])
         self.current_position = self.B * self.T * self.process_rank
 
+
     def next_batch(self):
         B, T = self.B, self.T
-        buf = self.tokens[self.current_position : self.current_position+B*T+1]
+        buf = self.tokens[self.current_position : self.current_position + B*T +1]
         x = (buf[:-1]).view(B, T) # inputs
         y = (buf[1:]).view(B, T) # targets
         # advance the position in the tensor
         self.current_position += B * T * self.num_processes
         # if loading the next batch would be out of bounds, advance to next shard
         if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
-            self.current_shard = (self.current_shard + 1) % len(self.shards)
-            self.tokens = load_tokens(self.shards[self.current_shard])
-            self.current_position = B * T * self.process_rank
+            # self.current_shard = (self.current_shard + 1) % len(self.shards)
+            # self.tokens = load_tokens(self.shards[self.current_shard])
+            # self.current_position = B * T * self.process_rank
+            self.current_position = 0
         return x, y
 
 
 # ----------------------------------------------------------------------#
-num_return_sequences = 5
-max_length = 30
-
-# model = GPT.from_pretrained('gpt2')
-
-model = GPT(GPTConfig())    # randomly initialized model
-model.eval()
-model.to('mps')
-
-
-
-
-import tiktoken
-enc = tiktoken.get_encoding('gpt2')
-tokens = enc.encode("Hello, I'm a language model,")
-tokens = torch.tensor(tokens, dtype=torch.long) # (8,)
-tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1) # (5, 8)
-x = tokens.to('mps')
-
-torch.manual_seed(42)
-# generate!
-while x.size(1) < max_length: # max_length=30
-    # forward the model to get the logits
-    with torch.no_grad():
-        logits, loss = model(x)[0] # (B, T, vocab_size)
-        # take the logits at the last position
-        logits = logits[:, -1, :] # (B, vocab_size)
-        # get the probabilities
-        probs = F.softmax(logits, dim=-1)
-        # do top-k sampling of 50 (huggingface pipeline default)
-        # topk_probs here becomes (5, 50), topk_indices is (5, 50)
-        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-        # select a token from the top-k probabilities
-        # note: multinomial does not demand the input to sum to 1
-        ix = torch.multinomial(topk_probs, 1) # (B, 1)
-        # gather the corresponding indices
-        xcol = torch.gather(topk_indices, -1, ix) # (B, 1)
-        # append to the sequence
-        x = torch.cat((x, xcol), dim=1)
-
-# print the generated text
-for i in range(5):
-    tokens = x[i, :30].tolist()
-    decoded = enc.decode(tokens)
-    print(">", decoded)
