@@ -23,7 +23,10 @@ class CausalSelfAttention(nn.Module):
         assert config.n_embd % config.n_head == 0
         # Q, K, V projections as single matrix operation
         self.c_attn = nn.Linear(config.n_embd, config.n_embd * 3)     
+        # layer output projection
         self.c_proj = nn.Linear(config.n_embd, config.n_embd)         # linear proj on attention output
+        self.c_proj.NANOGPT_SCALE_INIT = 1
+        # config
         self.n_head = config.n_head
         self.n_embd = config.n_embd
     
@@ -34,8 +37,8 @@ class CausalSelfAttention(nn.Module):
         q, k, v = qkv.split(self.n_embd, dim=-1)                        # (B, T, C) , ..
         # split heads
         q = q.view(B, T, self.n_head, C//self.n_head).transpose(1,2)    # (B, nh, T, hs) # transpose n_head with seq_len for attention calculation
-        k = k.view(B, T, self.n_head, C//self.n_head).transpose(1,2)
-        v = v.view(B, T, self.n_head, C//self.n_head).transpose(1,2)
+        k = k.view(B, T, self.n_head, C//self.n_head).transpose(1,2)    # (B, nh, T, hs)
+        v = v.view(B, T, self.n_head, C//self.n_head).transpose(1,2)    # (B, nh, T, hs)
         y = F.scaled_dot_product_attention(q, k, v, is_causal=True)     # flash attention # (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side   # (B, T, C)
         # output projection
@@ -53,7 +56,6 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(config.n_embd, fc_dim)     # fan out
         self.gelu = nn.GELU(approximate='tanh')          # Gelu non-linearlity
         self.c_proj = nn.Linear(fc_dim, config.n_embd)   # fan in
-        # scaling factor for linear layers by 1/sqrt(depth_layer) - to control residual stream stddev 
         self.c_proj.NANOGPT_SCALE_INIT = 1
 
     def forward(self, x):
@@ -110,6 +112,8 @@ class GPT(nn.Module):
         # following GPT-2 init hyper-parameters
         if isinstance(module, nn.Linear):
             std = 0.02
+            # scaling factor for linear layers by 1/sqrt(no_layers) 
+            # this is to control residual stream stddev close to 1, otherwise it keeps growing
             if hasattr(module, 'NANOGPT_SCALE_INIT'):
                 std *= (2 * self.config.n_layer) ** -0.5
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
