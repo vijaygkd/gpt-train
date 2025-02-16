@@ -5,7 +5,7 @@ description = "Default template for PDM package"
 authors = [
     {name = "Vijay Gaikwad", email = "vijaygkd@gmail.com"},
 ]
-dependencies = ["torch>=2.6.0", "transformers>=4.48.3"]
+dependencies = ["torch>=2.6.0", "transformers>=4.48.3", "matplotlib>=3.10.0", "tiktoken>=0.9.0"]
 requires-python = "==3.12.*"
 readme = "README.md"
 license = {text = "MIT"}
