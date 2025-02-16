@@ -1,0 +1,18 @@
+[project]
+name = "gpt-train"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Vijay Gaikwad", email = "vijaygkd@gmail.com"},
+]
+dependencies = ["torch>=2.6.0", "transformers>=4.48.3"]
+requires-python = "==3.12.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
+
+[dependency-groups]
+dev = ["jupyterlab>=4.3.5"]
