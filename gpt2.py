@@ -268,11 +268,11 @@ class DataLoaderLite:
     #     self.reset()
 
 
-    def __init__(self, B, T):
+    def __init__(self, B, T, process_rank, num_processes):
         self.B = B # batch size
         self.T = T # sequence length
-        self.num_processes = 1
-
+        self.process_rank = process_rank
+        self.num_processes = num_processes
         
         # load the input file
         with open('input.txt', 'r', encoding='utf-8') as f:
@@ -290,7 +290,8 @@ class DataLoaderLite:
         print(f"- {n_tokens:,} tokens")
         print(f"- {n_batches:,} batches per epoch")
         
-        self.current_position = 0
+        # partition the data for each process as different start position
+        self.current_position = self.B * self.T * self.num_processes
 
 
     def reset(self):
@@ -312,7 +313,7 @@ class DataLoaderLite:
             # self.current_shard = (self.current_shard + 1) % len(self.shards)
             # self.tokens = load_tokens(self.shards[self.current_shard])
             # self.current_position = B * T * self.process_rank
-            self.current_position = 0
+            self.current_position = self.B * self.T * self.process_rank
         return x, y
 
 
