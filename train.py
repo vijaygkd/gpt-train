@@ -144,7 +144,7 @@ def save_checkpoint(raw_model, checkpoint_name):
 log_dir = "log"
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, f"log.txt")
-log_interval = 100
+log_interval = 250              # log every n steps
 with open(log_file, "w") as f: # open for writing to clear the file
     pass
 
@@ -246,11 +246,6 @@ for step in range(max_steps):
             decoded = enc.decode(tokens)
             print(f"rank {ddp_rank} sample {i}: {decoded}")
 
-    # Model weight Checkpointing
-    if step > 0 and (step % 5000 == 0 or last_step):
-        # optionally write model checkpoints
-        save_checkpoint(raw_model, checkpoint_name=f"model_{step:05d}")
-
     # Training Step
     model.train()
     optimizer.zero_grad()
@@ -295,8 +290,10 @@ for step in range(max_steps):
         with open(log_file, "a") as f:
             f.write(f"{step} train {loss_accum.item():.6f}\n")
 
-# save final model
-save_checkpoint(raw_model, checkpoint_name=f"model_final")
+    # Model weight Checkpointing
+    if step > 0 and (step % log_interval == 0 or last_step):
+        # optionally write model checkpoints
+        save_checkpoint(raw_model, checkpoint_name=f"model_{step:05d}")
 
 if ddp:
     destroy_process_group()

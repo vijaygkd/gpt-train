@@ -163,5 +163,5 @@ cython_debug/
 pdm.lock
 
 edu_fineweb10B/
-log/log.txt
+log/
 hellaswag/
