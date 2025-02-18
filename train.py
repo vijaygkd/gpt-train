@@ -68,8 +68,6 @@ if master_process:
     print(f"Total batch size: {total_batch_size} tokens")
     print(f"=> grad accum steps: {grad_accum_steps}")
 
-# print("I am GPU: ", ddp_rank)
-# import sys; sys.exit(0)
 
 train_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_local_rank, num_processes=ddp_world_size, split='train', master_process=master_process)
 val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_local_rank, num_processes=ddp_world_size, split='val', master_process=master_process)
@@ -94,7 +92,10 @@ enc = tiktoken.get_encoding("gpt2")
 max_lr = 6e-4
 min_lr = max_lr * 0.1
 warmup_steps = 715      # 375M token warmup / total_batch_size - as per GPT3 paper
-max_steps = 19073     # 10B (dataset) / (total_batch_size) 
+steps_per_epoch = 19073     # 10B (dataset) / (total_batch_size) 
+epochs = 1
+max_steps = steps_per_epoch * epochs
+print(f"Total steps: {max_steps} | Epochs: {epochs}")
 def get_lr(it):
     # 1) warm up phase
     if it < warmup_steps:
@@ -293,7 +294,17 @@ for step in range(max_steps):
     # Model weight Checkpointing
     if step > 0 and (step % log_interval == 0 or last_step):
         # optionally write model checkpoints
-        save_checkpoint(raw_model, checkpoint_name=f"model_{step:05d}")
+        checkpoint_name=f"model_{step:05d}"
+        checkpoint_path = os.path.join(log_dir, f"{checkpoint_name}.pt")
+        checkpoint = {
+            'model': raw_model.state_dict(),
+            'config': raw_model.config,
+            'step': step,
+            'val_loss': val_loss_accum.item()
+        }
+        # you might also want to add optimizer.state_dict() and
+        # rng seeds etc., if you wanted to more exactly resume training
+        torch.save(checkpoint, checkpoint_path)
 
 if ddp:
     destroy_process_group()
