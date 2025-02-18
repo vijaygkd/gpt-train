@@ -128,6 +128,18 @@ optimizer = raw_model.configure_optimizers(
 ## -------------------------------------------------
 ## TRAIN
 
+def save_checkpoint(raw_model, checkpoint_name):
+    checkpoint_path = os.path.join(log_dir, f"{checkpoint_name}.pt")
+    checkpoint = {
+        'model': raw_model.state_dict(),
+        'config': raw_model.config,
+        'step': step,
+        'val_loss': val_loss_accum.item()
+    }
+    # you might also want to add optimizer.state_dict() and
+    # rng seeds etc., if you wanted to more exactly resume training
+    torch.save(checkpoint, checkpoint_path)
+
 # create the log directory we will write checkpoints to and log to
 log_dir = "log"
 os.makedirs(log_dir, exist_ok=True)
@@ -197,7 +209,7 @@ for step in range(max_steps):
             with open(log_file, "a") as f:
                 f.write(f"{step} hella {acc_norm:.4f}\n")
 
-    # once in a while generate from the model (except step 0, which is noise)
+    # generate text from the model (except step 0, which is noise)
     if ((step > 0 and step % 250 == 0) or last_step) and (not use_compile):
         model.eval()
         num_return_sequences = 4
@@ -236,16 +248,7 @@ for step in range(max_steps):
     # Model weight Checkpointing
     if step > 0 and (step % 5000 == 0 or last_step):
         # optionally write model checkpoints
-        checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
-        checkpoint = {
-            'model': raw_model.state_dict(),
-            'config': raw_model.config,
-            'step': step,
-            'val_loss': val_loss_accum.item()
-        }
-        # you might also want to add optimizer.state_dict() and
-        # rng seeds etc., if you wanted to more exactly resume training
-        torch.save(checkpoint, checkpoint_path)
+        save_checkpoint(raw_model, checkpoint_name=f"model_{step:05d}")
 
     # Training Step
     model.train()
@@ -290,6 +293,9 @@ for step in range(max_steps):
         print(f"step {step} | loss: {loss_accum:.6f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
         with open(log_file, "a") as f:
             f.write(f"{step} train {loss_accum.item():.6f}\n")
+
+# save final model
+save_checkpoint(raw_model, checkpoint_name=f"model_final")
 
 if ddp:
     destroy_process_group()
