@@ -248,57 +248,53 @@ def load_tokens(filename):
     return ptt
 
 class DataLoaderLite: 
-    # def __init__(self, B, T, process_rank, num_processes, split):
-    #     self.B = B
-    #     self.T = T
-    #     self.process_rank = process_rank
-    #     self.num_processes = num_processes
-    #     assert split in {'train', 'val'}
-
-    #     # get the shard filenames
-    #     data_root = "edu_fineweb10B"
-    #     shards = os.listdir(data_root)
-    #     shards = [s for s in shards if split in s]
-    #     shards = sorted(shards)
-    #     shards = [os.path.join(data_root, s) for s in shards]
-    #     self.shards = shards
-    #     assert len(shards) > 0, f"no shards found for split {split}"
-    #     if master_process:
-    #         print(f"found {len(shards)} shards for split {split}")
-    #     self.reset()
-
-
-    def __init__(self, B, T, process_rank, num_processes):
-        self.B = B # batch size
-        self.T = T # sequence length
+    def __init__(self, B, T, process_rank, num_processes, split, master_process):
+        self.B = B
+        self.T = T
         self.process_rank = process_rank
         self.num_processes = num_processes
-        
-        # load the input file
-        with open('input.txt', 'r', encoding='utf-8') as f:
-            text = f.read()
-        
-        # encode text to tokens using tiktoken GPT-2 encoder
-        enc = tiktoken.get_encoding("gpt2")
-        tokens = enc.encode(text)        
-        # load first shard
-        self.tokens = torch.tensor(tokens)
-        # calculate and print stats
-        n_tokens = len(self.tokens)
-        n_batches = n_tokens // (self.B * self.T)
-        print(f"Dataset stats:")
-        print(f"- {n_tokens:,} tokens")
-        print(f"- {n_batches:,} batches per epoch")
-        
-        # partition the data for each process as different start position
-        self.current_position = self.B * self.T * self.num_processes
+        assert split in {'train', 'val'}
 
+        # get the shard filenames
+        data_root = "edu_fineweb10B"
+        shards = os.listdir(data_root)
+        shards = [s for s in shards if split in s]
+        shards = sorted(shards)
+        shards = [os.path.join(data_root, s) for s in shards]
+        self.shards = shards
+        assert len(shards) > 0, f"no shards found for split {split}"
+        if master_process:
+            print(f"found {len(shards)} shards for split {split}")
+        self.reset()
 
     def reset(self):
         # state, init at shard zero
         self.current_shard = 0
         self.tokens = load_tokens(self.shards[self.current_shard])
         self.current_position = self.B * self.T * self.process_rank
+
+    # tiny shakespear init method
+    # def __init__(self, B, T, process_rank, num_processes):
+    #     self.B = B # batch size
+    #     self.T = T # sequence length
+    #     self.process_rank = process_rank
+    #     self.num_processes = num_processes
+    #     # load the input file
+    #     with open('input.txt', 'r', encoding='utf-8') as f:
+    #         text = f.read()
+    #     # encode text to tokens using tiktoken GPT-2 encoder
+    #     enc = tiktoken.get_encoding("gpt2")
+    #     tokens = enc.encode(text)        
+    #     # load first shard
+    #     self.tokens = torch.tensor(tokens)
+    #     # calculate and print stats
+    #     n_tokens = len(self.tokens)
+    #     n_batches = n_tokens // (self.B * self.T)
+    #     print(f"Dataset stats:")
+    #     print(f"- {n_tokens:,} tokens")
+    #     print(f"- {n_batches:,} batches per epoch")
+    #     # partition the data for each process as different start position
+    #     self.current_position = self.B * self.T * self.num_processes
 
 
     def next_batch(self):
@@ -310,10 +306,9 @@ class DataLoaderLite:
         self.current_position += B * T * self.num_processes
         # if loading the next batch would be out of bounds, advance to next shard
         if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
-            # self.current_shard = (self.current_shard + 1) % len(self.shards)
-            # self.tokens = load_tokens(self.shards[self.current_shard])
-            # self.current_position = B * T * self.process_rank
-            self.current_position = self.B * self.T * self.process_rank
+            self.current_shard = (self.current_shard + 1) % len(self.shards)
+            self.tokens = load_tokens(self.shards[self.current_shard])
+            self.current_position = B * T * self.process_rank
         return x, y
 
 
