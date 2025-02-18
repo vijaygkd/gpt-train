@@ -56,7 +56,7 @@ if torch.cuda.is_available():
 ## -------------------------------------------------
 ## DATASET
 # batch size - 0.5M as per GPT paper
-total_batch_size = 524_288    # 2^19  ~0.5M
+total_batch_size = 524288    # 2^19  ~0.5M
 B = 16      # micro batch size
 T = 1024    # seq length
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
@@ -71,9 +71,10 @@ if master_process:
 train_loader = DataLoaderLite(
     B=B, T=T, 
     process_rank=ddp_local_rank,
-    num_processes=ddp_world_size    
+    num_processes=ddp_world_size,
+    split='train',
+    master_process=master_process
 )
-
 
 ## -------------------------------------------------
 ## MODEL
@@ -91,8 +92,8 @@ raw_model = model.module if ddp else model
 ## OPTIMIZER
 max_lr = 6e-4
 min_lr = max_lr * 0.1
-warmup_steps = 10
-max_steps = 50
+warmup_steps = 715      # 375M token warmup / total_batch_size - as per GPT3 paper
+max_steps = 19073     # 10B (dataset) / (total_batch_size) 
 def get_lr(it):
     # 1) warm up phase
     if it < warmup_steps:
