@@ -110,13 +110,6 @@ def get_lr(it):
     return min_lr + coeff * (max_lr - min_lr)
 
 # optimizer hyperparams based on GPT-3 paper
-# optimizer = torch.optim.AdamW(
-#     model.parameters(), 
-#     lr=3e-4,
-#     betas=(0.9, 0.95),
-#     eps=1e-8
-# )
-
 optimizer = raw_model.configure_optimizers(
     weight_decay=0.1,
     learning_rate=6e-4,
@@ -128,18 +121,6 @@ optimizer = raw_model.configure_optimizers(
 
 ## -------------------------------------------------
 ## TRAIN
-
-def save_checkpoint(raw_model, checkpoint_name):
-    checkpoint_path = os.path.join(log_dir, f"{checkpoint_name}.pt")
-    checkpoint = {
-        'model': raw_model.state_dict(),
-        'config': raw_model.config,
-        'step': step,
-        'val_loss': val_loss_accum.item()
-    }
-    # you might also want to add optimizer.state_dict() and
-    # rng seeds etc., if you wanted to more exactly resume training
-    torch.save(checkpoint, checkpoint_path)
 
 # create the log directory we will write checkpoints to and log to
 log_dir = "log"
