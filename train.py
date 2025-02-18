@@ -60,7 +60,7 @@ if torch.cuda.is_available():
 ## DATASET
 # batch size - 0.5M as per GPT paper
 total_batch_size = 524288    # 2^19  ~0.5M
-B = 16      # micro batch size
+B = 64      # micro batch size
 T = 1024    # seq length
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
@@ -144,6 +144,7 @@ def save_checkpoint(raw_model, checkpoint_name):
 log_dir = "log"
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, f"log.txt")
+log_interval = 100
 with open(log_file, "w") as f: # open for writing to clear the file
     pass
 
@@ -156,7 +157,7 @@ for step in range(max_steps):
     last_step = (step == max_steps - 1)
 
     # Evaluate on Validation loss dataset once in a while
-    if step % 250 == 0 or last_step:
+    if step % log_interval == 0 or last_step:
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -177,7 +178,7 @@ for step in range(max_steps):
                 f.write(f"{step} val {val_loss_accum.item():.4f}\n")
 
     # once in a while evaluate hellaswag
-    if (step % 250 == 0 or last_step) and (not use_compile):
+    if (step % log_interval == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
         for i, example in enumerate(iterate_examples("val")):
@@ -210,7 +211,7 @@ for step in range(max_steps):
                 f.write(f"{step} hella {acc_norm:.4f}\n")
 
     # generate text from the model (except step 0, which is noise)
-    if ((step > 0 and step % 250 == 0) or last_step) and (not use_compile):
+    if ((step > 0 and step % log_interval == 0) or last_step) and (not use_compile):
         model.eval()
         num_return_sequences = 4
         max_length = 32
