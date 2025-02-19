@@ -30,7 +30,6 @@ class CausalSelfAttention(nn.Module):
         # config
         self.n_head = config.n_head
         self.n_embd = config.n_embd
-        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size))
     
     def forward(self, x):
         B, T, C = x.size()  # batch_size, seq_len, n_embd
