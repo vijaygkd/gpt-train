@@ -275,7 +275,7 @@ for step in range(max_steps):
             f.write(f"{step} train {loss_accum.item():.6f}\n")
 
     # Model weight Checkpointing
-    if step > 0 and (step % log_interval == 0 or last_step):
+    if step > 0 and (step % 5000 == 0 or last_step):
         # optionally write model checkpoints
         checkpoint_name=f"model_{step:05d}"
         checkpoint_path = os.path.join(log_dir, f"{checkpoint_name}.pt")
