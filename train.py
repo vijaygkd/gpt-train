@@ -47,7 +47,7 @@ else:
         device = "mps"
     print(f"using device: {device}")
 
-# added after video, pytorch can be serious about it's device vs. device_type distinction
+print(f"Device: {device}")
 device_type = "cuda" if device.startswith("cuda") else "cpu"
 
 # IMP - because of the seed, identical copies of model are created in each GPU process
@@ -74,7 +74,6 @@ val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_local_rank, num_processes
 
 ## -------------------------------------------------
 ## MODEL
-print(f"Device: {device}")
 nice_vocab_size = 50304     # nice power of 2
 model = GPT(GPTConfig(vocab_size=nice_vocab_size))
 model.to(device)
@@ -89,11 +88,11 @@ enc = tiktoken.get_encoding("gpt2")
 
 ## -------------------------------------------------
 ## OPTIMIZER
-max_lr = 6e-4
+max_lr = 6e-4 * 3       # increase learning rate
 min_lr = max_lr * 0.1
 warmup_steps = 715      # 375M token warmup / total_batch_size - as per GPT3 paper
 steps_per_epoch = 19073     # 10B (dataset) / (total_batch_size) 
-epochs = 1
+epochs = 3              # train for 30B
 max_steps = steps_per_epoch * epochs
 print(f"Total steps: {max_steps} | Epochs: {epochs}")
 def get_lr(it):
@@ -236,21 +235,24 @@ for step in range(max_steps):
         # data
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
-        # BF16 mixed precision training
+        if ddp:
+            # sync avg grad between processes on last grad accum step
+            # so that all copies of model get same gradients and weights stay in sync
+            model.require_backward_grad_sync = (micro_step == grad_accum_steps-1)
+        # BF16 mixed precision training with autocast
         with torch.autocast(device_type=device, dtype=torch.bfloat16):
+            # forward pass
             logits, loss = model(x, y)
         # scale the loss to account for gradient accumulation
         # loss.backwards() keeps adding losses during successive steps
         # normalize it so we have mean loss during gradient step
         loss = loss / grad_accum_steps
         loss_accum += loss.detach()
-        if ddp:
-            # sync avg of grads between processes on last grad accum step
-            model.require_backward_grad_sync = (micro_step == grad_accum_steps-1)
         # backprop
         loss.backward()
+
     if ddp:
-        # calculate avg loss_accum across process and distribute
+        # calculate avg loss_accum across process and distribute to all processes 
         dist.all_reduce(loss_accum, op=dist.ReduceOp.AVG)
     # gradient cliping - as per GPT3 paper
     # to avoid shocking the model during training due to big loss in a batch
@@ -273,7 +275,7 @@ for step in range(max_steps):
             f.write(f"{step} train {loss_accum.item():.6f}\n")
 
     # Model weight Checkpointing
-    if step > 0 and (step % log_interval == 0 or last_step):
+    if step > 0 and (step % 5000 == 0 or last_step):
         # optionally write model checkpoints
         checkpoint_name=f"model_{step:05d}"
         checkpoint_path = os.path.join(log_dir, f"{checkpoint_name}.pt")
