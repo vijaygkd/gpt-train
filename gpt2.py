@@ -209,6 +209,18 @@ class GPT(nn.Module):
 
         return model
 
+    @classmethod
+    def from_checkpoint(cls, checkpoint_path: str, device='cpu'):
+        """Loads a model from a checkpoint file containing the state dict"""
+        with torch.serialization.safe_globals([GPTConfig]):
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device(device))
+        # create a new model with the same config as the checkpoint
+        config = checkpoint['config']
+        model = GPT(config)
+        # load the weights
+        model.load_state_dict(checkpoint['model'])
+        return model
+
     # todo : move to training module
     def configure_optimizers(self, weight_decay, learning_rate, device_type, betas=(0.9, 0.95), eps=1e-8):
         # start with all of the candidate parameters (that require grad)
