@@ -88,11 +88,11 @@ enc = tiktoken.get_encoding("gpt2")
 
 ## -------------------------------------------------
 ## OPTIMIZER
-max_lr = 6e-4 * 3       # increase learning rate
+max_lr = 6e-4       # increase learning rate
 min_lr = max_lr * 0.1
 warmup_steps = 715      # 375M token warmup / total_batch_size - as per GPT3 paper
 steps_per_epoch = 19073     # 10B (dataset) / (total_batch_size) 
-epochs = 3              # train for 30B
+epochs = 5              # train for 50B
 max_steps = steps_per_epoch * epochs
 print(f"Total steps: {max_steps} | Epochs: {epochs}")
 def get_lr(it):
