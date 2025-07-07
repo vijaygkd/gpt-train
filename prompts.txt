@@ -1,0 +1,5 @@
+Translate the following English sentence to French: "The cat sits on the mat."
+If you leave ice cream out in the sun, what happens?
+What is the next number in the series: 2, 4, 8, 16, ?
+Write a Python function to calculate the factorial of a number.
+Write a brief poem about autumn in the style of Robert Frost.
